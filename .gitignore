@@ -1,0 +1,22 @@
+# Secrets — NEVER commit
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# Backups (don't commit DB dumps or upload tarballs)
+backups/
+*.sql
+*.sql.gz
+*.tar.gz
+
+# Docker volume artifacts (managed by Docker, not git)
+docker-volumes/
+
+# OS / IDE noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

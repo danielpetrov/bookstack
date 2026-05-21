@@ -1,0 +1,66 @@
+services:
+  db:
+    image: mariadb:11.4
+    container_name: kb-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: bookstack
+      MARIADB_USER: bookstack
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  app:
+    image: lscr.io/linuxserver/bookstack:latest
+    container_name: kb-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Europe/Sofia
+
+      # The URL users hit in the browser. MUST match exactly (incl. port)
+      # or BookStack will redirect-loop. Change for production.
+      APP_URL: http://localhost:6875
+      APP_KEY: ${APP_KEY}
+      APP_ENV: production
+      APP_DEBUG: "false"
+
+      # Database
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USERNAME: bookstack
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: bookstack
+
+      # Auth: local email/password accounts only.
+      AUTH_METHOD: standard
+      AUTH_AUTO_INITIATE: "false"
+
+      # No SMTP wired yet — emails go to the container log (works without breaking the app).
+      # Switch MAIL_DRIVER to "smtp" + add MAIL_HOST/PORT/USERNAME/PASSWORD when ready.
+      MAIL_DRIVER: log
+
+      # Don't force email confirmation while there's no SMTP.
+      REQUIRE_EMAIL_CONFIRMATION: "false"
+
+      # Allow self-registration only via admin invite (default; explicit for clarity).
+      ALLOW_REGISTRATION: "false"
+    ports:
+      - "6875:80"
+    volumes:
+      - app_data:/config
+
+volumes:
+  db_data:
+  app_data:
