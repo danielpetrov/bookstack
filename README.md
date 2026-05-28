@@ -8,6 +8,24 @@ Self-hosted BookStack — internal wiki for the team (use cases, troubleshooting
 
 ---
 
+## ⚡ Quick Start
+
+```bash
+# 1. Clone and enter the repo
+git clone <repo-url> bookstack && cd bookstack
+
+# 2. Create .env and generate secrets (requires openssl / Git Bash on Windows)
+cp .env.example .env
+bash scripts/gen-secrets.sh   # prints values → paste them into .env
+
+# 3. Run everything
+bash scripts/start.sh
+```
+
+> **Windows (PowerShell)?** Use Git Bash for `bash` commands, or WSL2. Docker Desktop itself runs fine in PowerShell.
+
+---
+
 ## 0. Prerequisites
 
 You need **Docker Desktop** installed. WSL2 backend is the default and recommended on Windows 11.
@@ -28,7 +46,7 @@ You need **Docker Desktop** installed. WSL2 backend is the default and recommend
 
 ## 1. First boot (local)
 
-From the repo root (`Work/internal-kb`):
+From the repo root (`bookstack/`):
 
 ```bash
 docker compose up -d
@@ -131,7 +149,7 @@ gunzip -c backups/<stamp>/db.sql.gz | docker compose exec -T db \
 
 # 2. Restore uploads
 docker run --rm \
-  -v internal-kb_app_data:/data \
+  -v bookstack_app_data:/data \
   -v "$(pwd)/backups/<stamp>:/backup" \
   alpine sh -c "cd /data && tar -xzf /backup/uploads.tar.gz"
 ```
