@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Regenerate APP_KEY and DB passwords. Prints to stdout; you copy them into .env.
-# Run again only if you intend to invalidate existing sessions / wipe the stack.
+# Regenerate secrets for the Nextcloud KB stack.
+# Prints to stdout — redirect into .env:
+#   bash scripts/gen-secrets.sh > .env
 set -euo pipefail
 
 if ! command -v openssl >/dev/null 2>&1; then
@@ -8,6 +9,7 @@ if ! command -v openssl >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "APP_KEY=base64:$(openssl rand -base64 32)"
 echo "DB_ROOT_PASSWORD=$(openssl rand -base64 24 | tr -d '=+/' | head -c 32)"
 echo "DB_PASSWORD=$(openssl rand -base64 24 | tr -d '=+/' | head -c 32)"
+echo "NEXTCLOUD_ADMIN_USER=admin"
+echo "NEXTCLOUD_ADMIN_PASSWORD=$(openssl rand -base64 18 | tr -d '=+/' | head -c 24)"

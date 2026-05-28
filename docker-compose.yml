@@ -1,12 +1,18 @@
+name: kb
+
 services:
   db:
     image: mariadb:11.4
     container_name: kb-db
     restart: unless-stopped
+    command:
+      - --transaction-isolation=READ-COMMITTED
+      - --log-bin=binlog
+      - --binlog-format=ROW
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MARIADB_DATABASE: bookstack
-      MARIADB_USER: bookstack
+      MARIADB_DATABASE: nextcloud
+      MARIADB_USER: nextcloud
       MARIADB_PASSWORD: ${DB_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
@@ -17,50 +23,80 @@ services:
       retries: 10
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    container_name: kb-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   app:
-    image: lscr.io/linuxserver/bookstack:latest
+    image: nextcloud:30-apache
     container_name: kb-app
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      PUID: "1000"
-      PGID: "1000"
-      TZ: Europe/Sofia
-
-      # The URL users hit in the browser. MUST match exactly (incl. port)
-      # or BookStack will redirect-loop. Change for production.
-      APP_URL: http://localhost:6875
-      APP_KEY: ${APP_KEY}
-      APP_ENV: production
-      APP_DEBUG: "false"
-
-      # Database
-      DB_HOST: db
-      DB_PORT: "3306"
-      DB_USERNAME: bookstack
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_DATABASE: bookstack
-
-      # Auth: local email/password accounts only.
-      AUTH_METHOD: standard
-      AUTH_AUTO_INITIATE: "false"
-
-      # No SMTP wired yet — emails go to the container log (works without breaking the app).
-      # Switch MAIL_DRIVER to "smtp" + add MAIL_HOST/PORT/USERNAME/PASSWORD when ready.
-      MAIL_DRIVER: log
-
-      # Don't force email confirmation while there's no SMTP.
-      REQUIRE_EMAIL_CONFIRMATION: "false"
-
-      # Allow self-registration only via admin invite (default; explicit for clarity).
-      ALLOW_REGISTRATION: "false"
+      redis:
+        condition: service_healthy
     ports:
-      - "6875:80"
+      - "8080:80"
+    environment:
+      # Database
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+
+      # Redis (sessions, cache, file-locking)
+      REDIS_HOST: redis
+      REDIS_HOST_PORT: "6379"
+
+      # Initial admin (auto-created on first boot)
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:-admin}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+
+      # Domains Nextcloud will accept requests on.
+      # Add the production domain here once we deploy: "localhost kb.company.com"
+      NEXTCLOUD_TRUSTED_DOMAINS: "localhost host.docker.internal"
+
+      # Tell Nextcloud what URL it lives at (for generated links / WOPI)
+      OVERWRITEPROTOCOL: http
+      OVERWRITEHOST: localhost:8080
+
+      # PHP limits — needed for big uploads / Office editing
+      PHP_MEMORY_LIMIT: 512M
+      PHP_UPLOAD_LIMIT: 512M
     volumes:
-      - app_data:/config
+      - app_data:/var/www/html
+    extra_hosts:
+      # Lets the Nextcloud container reach Collabora via host.docker.internal:9980,
+      # which is also the URL the browser uses — required so the in-browser
+      # editor and Nextcloud's discovery call agree on one URL.
+      - "host.docker.internal:host-gateway"
+
+  collabora:
+    image: collabora/code:latest
+    container_name: kb-collabora
+    restart: unless-stopped
+    cap_add:
+      - MKNOD
+    ports:
+      - "9980:9980"
+    environment:
+      # Whitelist Nextcloud's URL so Collabora accepts requests from it.
+      # Replace with https://kb.company.com when going to production.
+      aliasgroup1: "http://localhost:8080"
+      extra_params: "--o:ssl.enable=false --o:ssl.termination=false --o:welcome.enable=false --o:logging.level=warning"
+      DONT_GEN_SSL_CERT: "true"
 
 volumes:
   db_data:
+  redis_data:
   app_data:

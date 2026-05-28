@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Back up BookStack: MariaDB dump + uploads volume.
+# Back up the Nextcloud KB: MariaDB dump + the entire Nextcloud data volume.
 # Run from the repo root:  bash scripts/backup.sh
 #
 # Output goes to ./backups/<YYYY-MM-DD_HHMM>/
@@ -21,18 +21,25 @@ STAMP=$(date +%Y-%m-%d_%H%M)
 OUT="backups/${STAMP}"
 mkdir -p "$OUT"
 
-echo "[1/2] Dumping MariaDB to ${OUT}/db.sql.gz"
+echo "[1/3] Putting Nextcloud into maintenance mode"
+docker compose exec -u www-data -T app php occ maintenance:mode --on || true
+
+echo "[2/3] Dumping MariaDB to ${OUT}/db.sql.gz"
 docker compose exec -T db \
-  mariadb-dump -u root -p"${DB_ROOT_PASSWORD}" --single-transaction --quick bookstack \
+  mariadb-dump -u root -p"${DB_ROOT_PASSWORD}" --single-transaction --quick nextcloud \
   | gzip > "${OUT}/db.sql.gz"
 
-echo "[2/2] Tarring uploads volume to ${OUT}/uploads.tar.gz"
-# Spin up a throwaway alpine container that mounts the named volume, then tars it.
+echo "[3/3] Tarring Nextcloud data volume to ${OUT}/data.tar.gz"
+# The Compose project is named "kb" (see top of docker-compose.yml),
+# so the named volume is kb_app_data.
 docker run --rm \
-  -v internal-kb_app_data:/data:ro \
+  -v kb_app_data:/data:ro \
   -v "$(pwd)/${OUT}:/backup" \
   alpine \
-  sh -c "cd /data && tar -czf /backup/uploads.tar.gz ."
+  sh -c "cd /data && tar -czf /backup/data.tar.gz ."
+
+echo "Releasing maintenance mode"
+docker compose exec -u www-data -T app php occ maintenance:mode --off || true
 
 echo "Done: ${OUT}"
-du -sh "${OUT}"/*
+du -sh "${OUT}"/* 2>/dev/null || true
